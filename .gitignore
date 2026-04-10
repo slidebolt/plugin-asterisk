@@ -36,3 +36,4 @@ build/
 bin/
 /plugin-asterisk
 /sb-plugin-asterisk
+!.env.example
