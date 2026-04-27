@@ -93,13 +93,24 @@ func sendAndReceive(t *testing.T, cmds *messenger.Commands, entity domain.Entity
 	}
 }
 
+// Primary-entity IDs per device type. One device = one thing; the primary
+// entity is the canonical state-bearer for that device.
+const (
+	pbxEntity      = "status"
+	trunkEntity    = "registration"
+	endpointEntity = "registration"
+	callEntity     = "state"
+	vmEntity       = "mailbox"
+	queueEntity    = "stats"
+)
+
 // ==========================================================================
 // Internal storage: plugin-private data, invisible to query/search
 // ==========================================================================
 
 func TestInternal_WriteReadDelete(t *testing.T) {
 	_, store, _ := env(t)
-	key := domain.EntityKey{Plugin: PluginID, DeviceID: "asterisk", ID: "server"}
+	key := domain.EntityKey{Plugin: PluginID, DeviceID: "server", ID: pbxEntity}
 	payload := json.RawMessage(`{"ariEndpoint":"http://asterisk.example:8088","username":"admin"}`)
 
 	if err := store.WriteFile(storage.Internal, key, payload); err != nil {
@@ -124,9 +135,9 @@ func TestInternal_WriteReadDelete(t *testing.T) {
 
 func TestInternal_NotVisibleInQuery(t *testing.T) {
 	_, store, _ := env(t)
-	key := domain.EntityKey{Plugin: PluginID, DeviceID: "asterisk", ID: "server"}
+	key := domain.EntityKey{Plugin: PluginID, DeviceID: "server", ID: pbxEntity}
 
-	saveEntity(t, store, PluginID, "asterisk", "server", "pbx", "PBX", PBX{Connected: true})
+	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "PBX", PBX{Connected: true})
 	store.WriteFile(storage.Internal, key, json.RawMessage(`{"ariEndpoint":"http://asterisk.example:8088"}`))
 
 	entries := queryByType(t, store, "pbx")
@@ -137,9 +148,9 @@ func TestInternal_NotVisibleInQuery(t *testing.T) {
 
 func TestInternal_NotVisibleInSearch(t *testing.T) {
 	_, store, _ := env(t)
-	key := domain.EntityKey{Plugin: PluginID, DeviceID: "asterisk", ID: "server"}
+	key := domain.EntityKey{Plugin: PluginID, DeviceID: "server", ID: pbxEntity}
 
-	saveEntity(t, store, PluginID, "asterisk", "server", "pbx", "PBX", PBX{Connected: true})
+	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "PBX", PBX{Connected: true})
 	store.WriteFile(storage.Internal, key, json.RawMessage(`{"ariEndpoint":"http://asterisk.example:8088"}`))
 
 	entries, err := store.Search(PluginID + ".>")
@@ -149,8 +160,9 @@ func TestInternal_NotVisibleInSearch(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("search: got %d results, want 1", len(entries))
 	}
-	if entries[0].Key != PluginID+".asterisk.server" {
-		t.Errorf("search result key: got %q, want %s.asterisk.server", entries[0].Key, PluginID)
+	want := PluginID + ".server." + pbxEntity
+	if entries[0].Key != want {
+		t.Errorf("search result key: got %q, want %s", entries[0].Key, want)
 	}
 }
 
@@ -160,8 +172,8 @@ func TestInternal_NotVisibleInSearch(t *testing.T) {
 
 func TestCrossCutting_MultiPluginIsolation(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "server", "pbx", "Asterisk PBX", PBX{Connected: true})
-	saveEntity(t, store, "plugin-other", "dev1", "server", "pbx", "Other PBX", PBX{Connected: false})
+	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "Asterisk PBX", PBX{Connected: true})
+	saveEntity(t, store, "plugin-other", "server", "status", "pbx", "Other PBX", PBX{Connected: false})
 
 	entries, _ := store.Query(storage.Query{
 		Pattern: PluginID + ".>",
@@ -174,11 +186,11 @@ func TestCrossCutting_MultiPluginIsolation(t *testing.T) {
 
 func TestCrossCutting_QueryAllRegistered(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "trunk_voipms", "sip_trunk", "VoIP.ms",
+	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "VoIP.ms",
 		SIPTrunk{Registered: true})
-	saveEntity(t, store, PluginID, "asterisk", "trunk_other", "sip_trunk", "Other Trunk",
+	saveEntity(t, store, PluginID, "trunk_other", trunkEntity, "sip_trunk", "Other Trunk",
 		SIPTrunk{Registered: false})
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Ext 100",
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext 100",
 		SIPEndpoint{Registered: true})
 
 	entries, _ := store.Query(storage.Query{
@@ -195,10 +207,10 @@ func TestCrossCutting_QueryAllRegistered(t *testing.T) {
 
 func TestCustom_PBX_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "server", "pbx", "Asterisk PBX",
+	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "Asterisk PBX",
 		PBX{Connected: true, Version: "20.5.0", Uptime: 86400})
 
-	got := getEntity(t, store, PluginID, "asterisk", "server")
+	got := getEntity(t, store, PluginID, "server", pbxEntity)
 	s, ok := got.State.(PBX)
 	if !ok {
 		t.Fatalf("state type: got %T, want PBX", got.State)
@@ -210,10 +222,10 @@ func TestCustom_PBX_SaveGetHydrate(t *testing.T) {
 
 func TestCustom_SIPTrunk_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "trunk_voipms", "sip_trunk", "VoIP.ms",
+	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "VoIP.ms",
 		SIPTrunk{Registered: true, Host: "chicago3.voip.ms", Port: 5060, Latency: 25})
 
-	got := getEntity(t, store, PluginID, "asterisk", "trunk_voipms")
+	got := getEntity(t, store, PluginID, "trunk_voipms", trunkEntity)
 	s, ok := got.State.(SIPTrunk)
 	if !ok {
 		t.Fatalf("state type: got %T, want SIPTrunk", got.State)
@@ -225,10 +237,10 @@ func TestCustom_SIPTrunk_SaveGetHydrate(t *testing.T) {
 
 func TestCustom_SIPEndpoint_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Extension 100",
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Extension 100",
 		SIPEndpoint{Registered: true, InCall: false, IP: "192.168.88.50", Agent: "Yealink T54W"})
 
-	got := getEntity(t, store, PluginID, "asterisk", "ext_100")
+	got := getEntity(t, store, PluginID, "ext_100", endpointEntity)
 	s, ok := got.State.(SIPEndpoint)
 	if !ok {
 		t.Fatalf("state type: got %T, want SIPEndpoint", got.State)
@@ -240,10 +252,10 @@ func TestCustom_SIPEndpoint_SaveGetHydrate(t *testing.T) {
 
 func TestCustom_SIPCall_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "call_abc123", "sip_call", "Active Call",
+	saveEntity(t, store, PluginID, "call_abc123", callEntity, "sip_call", "Active Call",
 		SIPCall{State: "up", Caller: "100", Callee: "200", Duration: 120, Direction: "outbound"})
 
-	got := getEntity(t, store, PluginID, "asterisk", "call_abc123")
+	got := getEntity(t, store, PluginID, "call_abc123", callEntity)
 	s, ok := got.State.(SIPCall)
 	if !ok {
 		t.Fatalf("state type: got %T, want SIPCall", got.State)
@@ -255,10 +267,10 @@ func TestCustom_SIPCall_SaveGetHydrate(t *testing.T) {
 
 func TestCustom_Voicemail_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "voicemail_100", "voicemail", "VM 100",
+	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM 100",
 		Voicemail{NewMessages: 3, OldMessages: 7, Mailbox: "100"})
 
-	got := getEntity(t, store, PluginID, "asterisk", "voicemail_100")
+	got := getEntity(t, store, PluginID, "voicemail_100", vmEntity)
 	s, ok := got.State.(Voicemail)
 	if !ok {
 		t.Fatalf("state type: got %T, want Voicemail", got.State)
@@ -270,10 +282,10 @@ func TestCustom_Voicemail_SaveGetHydrate(t *testing.T) {
 
 func TestCustom_CallQueue_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "queue_support", "call_queue", "Support Queue",
+	saveEntity(t, store, PluginID, "queue_support", queueEntity, "call_queue", "Support Queue",
 		CallQueue{Callers: 5, Available: 2, Strategy: "ringall", Holdtime: 45})
 
-	got := getEntity(t, store, PluginID, "asterisk", "queue_support")
+	got := getEntity(t, store, PluginID, "queue_support", queueEntity)
 	s, ok := got.State.(CallQueue)
 	if !ok {
 		t.Fatalf("state type: got %T, want CallQueue", got.State)
@@ -289,9 +301,9 @@ func TestCustom_CallQueue_SaveGetHydrate(t *testing.T) {
 
 func TestCustom_QueryByType(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "trunk_voipms", "sip_trunk", "VoIP.ms", SIPTrunk{Registered: true})
-	saveEntity(t, store, PluginID, "asterisk", "trunk_other", "sip_trunk", "Other", SIPTrunk{Registered: false})
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Ext 100", SIPEndpoint{Registered: true})
+	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "VoIP.ms", SIPTrunk{Registered: true})
+	saveEntity(t, store, PluginID, "trunk_other", trunkEntity, "sip_trunk", "Other", SIPTrunk{Registered: false})
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext 100", SIPEndpoint{Registered: true})
 
 	entries := queryByType(t, store, "sip_trunk")
 	if len(entries) != 2 {
@@ -301,9 +313,9 @@ func TestCustom_QueryByType(t *testing.T) {
 
 func TestCustom_QueryEndpointsInCall(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Ext 100",
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext 100",
 		SIPEndpoint{Registered: true, InCall: true})
-	saveEntity(t, store, PluginID, "asterisk", "ext_200", "sip_endpoint", "Ext 200",
+	saveEntity(t, store, PluginID, "ext_200", endpointEntity, "sip_endpoint", "Ext 200",
 		SIPEndpoint{Registered: true, InCall: false})
 
 	entries, err := store.Query(storage.Query{
@@ -322,9 +334,9 @@ func TestCustom_QueryEndpointsInCall(t *testing.T) {
 
 func TestCustom_QueryVoicemailWithNewMessages(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "voicemail_100", "voicemail", "VM 100",
+	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM 100",
 		Voicemail{NewMessages: 3, Mailbox: "100"})
-	saveEntity(t, store, PluginID, "asterisk", "voicemail_200", "voicemail", "VM 200",
+	saveEntity(t, store, PluginID, "voicemail_200", vmEntity, "voicemail", "VM 200",
 		Voicemail{NewMessages: 0, Mailbox: "200"})
 
 	entries, err := store.Query(storage.Query{
@@ -347,7 +359,7 @@ func TestCustom_QueryVoicemailWithNewMessages(t *testing.T) {
 
 func TestCommand_PBXReload(t *testing.T) {
 	_, _, cmds := env(t)
-	entity := domain.Entity{ID: "server", Plugin: PluginID, DeviceID: "asterisk", Type: "pbx"}
+	entity := domain.Entity{ID: pbxEntity, Plugin: PluginID, DeviceID: "server", Type: "pbx"}
 	got := sendAndReceive(t, cmds, entity, PBXReload{}, PluginID+".>")
 	if _, ok := got.(PBXReload); !ok {
 		t.Fatalf("type: got %T, want PBXReload", got)
@@ -356,7 +368,7 @@ func TestCommand_PBXReload(t *testing.T) {
 
 func TestCommand_SIPCallOriginate(t *testing.T) {
 	_, _, cmds := env(t)
-	entity := domain.Entity{ID: "ext_100", Plugin: PluginID, DeviceID: "asterisk", Type: "sip_endpoint"}
+	entity := domain.Entity{ID: endpointEntity, Plugin: PluginID, DeviceID: "ext_100", Type: "sip_endpoint"}
 	got := sendAndReceive(t, cmds, entity, SIPCallOriginate{Extension: "200", Context: "internal"}, PluginID+".>")
 	cmd, ok := got.(SIPCallOriginate)
 	if !ok {
@@ -369,7 +381,7 @@ func TestCommand_SIPCallOriginate(t *testing.T) {
 
 func TestCommand_SIPHangup(t *testing.T) {
 	_, _, cmds := env(t)
-	entity := domain.Entity{ID: "call_abc", Plugin: PluginID, DeviceID: "asterisk", Type: "sip_call"}
+	entity := domain.Entity{ID: callEntity, Plugin: PluginID, DeviceID: "call_abc", Type: "sip_call"}
 	got := sendAndReceive(t, cmds, entity, SIPHangup{Channel: "SIP/100-00000001"}, PluginID+".>")
 	cmd, ok := got.(SIPHangup)
 	if !ok {
@@ -382,7 +394,7 @@ func TestCommand_SIPHangup(t *testing.T) {
 
 func TestCommand_SIPTransfer(t *testing.T) {
 	_, _, cmds := env(t)
-	entity := domain.Entity{ID: "call_abc", Plugin: PluginID, DeviceID: "asterisk", Type: "sip_call"}
+	entity := domain.Entity{ID: callEntity, Plugin: PluginID, DeviceID: "call_abc", Type: "sip_call"}
 	got := sendAndReceive(t, cmds, entity, SIPTransfer{Extension: "300"}, PluginID+".>")
 	cmd, ok := got.(SIPTransfer)
 	if !ok {
@@ -395,7 +407,7 @@ func TestCommand_SIPTransfer(t *testing.T) {
 
 func TestCommand_VoicemailDelete(t *testing.T) {
 	_, _, cmds := env(t)
-	entity := domain.Entity{ID: "voicemail_100", Plugin: PluginID, DeviceID: "asterisk", Type: "voicemail"}
+	entity := domain.Entity{ID: vmEntity, Plugin: PluginID, DeviceID: "voicemail_100", Type: "voicemail"}
 	got := sendAndReceive(t, cmds, entity, VoicemailDelete{Mailbox: "100"}, PluginID+".>")
 	cmd, ok := got.(VoicemailDelete)
 	if !ok {
@@ -412,12 +424,12 @@ func TestCommand_VoicemailDelete(t *testing.T) {
 
 func TestMixed_QueryEachTypeInIsolation(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "server", "pbx", "PBX", PBX{Connected: true})
-	saveEntity(t, store, PluginID, "asterisk", "trunk_voipms", "sip_trunk", "Trunk", SIPTrunk{Registered: true})
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Ext", SIPEndpoint{Registered: true})
-	saveEntity(t, store, PluginID, "asterisk", "call_abc", "sip_call", "Call", SIPCall{State: "up"})
-	saveEntity(t, store, PluginID, "asterisk", "voicemail_100", "voicemail", "VM", Voicemail{NewMessages: 1})
-	saveEntity(t, store, PluginID, "asterisk", "queue_support", "call_queue", "Queue", CallQueue{Callers: 2})
+	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "PBX", PBX{Connected: true})
+	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "Trunk", SIPTrunk{Registered: true})
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext", SIPEndpoint{Registered: true})
+	saveEntity(t, store, PluginID, "call_abc", callEntity, "sip_call", "Call", SIPCall{State: "up"})
+	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM", Voicemail{NewMessages: 1})
+	saveEntity(t, store, PluginID, "queue_support", queueEntity, "call_queue", "Queue", CallQueue{Callers: 2})
 
 	tests := []struct {
 		typ   string
@@ -440,9 +452,9 @@ func TestMixed_QueryEachTypeInIsolation(t *testing.T) {
 
 func TestMixed_CustomAndBuiltinBoolField(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "trunk_voipms", "sip_trunk", "Trunk",
+	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "Trunk",
 		SIPTrunk{Registered: true})
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Ext",
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext",
 		SIPEndpoint{Registered: true, InCall: true})
 
 	// Query state.in_call=true should only match endpoints, not trunks
@@ -464,7 +476,7 @@ func TestMixed_CustomAndBuiltinBoolField(t *testing.T) {
 
 func TestMixed_PatternIsolatesPlugin(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "server", "pbx", "PBX", PBX{Connected: true})
+	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "PBX", PBX{Connected: true})
 	saveEntity(t, store, "plugin-other", "dev1", "light001", "light", "Light", domain.Light{Power: true})
 
 	entries, _ := store.Query(storage.Query{
@@ -483,10 +495,10 @@ func TestMixed_PatternIsolatesPlugin(t *testing.T) {
 
 func TestMixed_DeleteCustomDoesNotAffectOther(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "trunk_voipms", "sip_trunk", "Trunk", SIPTrunk{Registered: true})
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Ext", SIPEndpoint{Registered: true})
+	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "Trunk", SIPTrunk{Registered: true})
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext", SIPEndpoint{Registered: true})
 
-	store.Delete(domain.EntityKey{Plugin: PluginID, DeviceID: "asterisk", ID: "trunk_voipms"})
+	store.Delete(domain.EntityKey{Plugin: PluginID, DeviceID: "trunk_voipms", ID: trunkEntity})
 
 	entries := queryByType(t, store, "sip_trunk")
 	if len(entries) != 0 {
@@ -501,10 +513,10 @@ func TestMixed_DeleteCustomDoesNotAffectOther(t *testing.T) {
 
 func TestMixed_OverwriteReflectsInQuery(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "asterisk", "voicemail_100", "voicemail", "VM",
+	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM",
 		Voicemail{NewMessages: 0, Mailbox: "100"})
 
-	saveEntity(t, store, PluginID, "asterisk", "voicemail_100", "voicemail", "VM",
+	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM",
 		Voicemail{NewMessages: 5, Mailbox: "100"})
 
 	entries, _ := store.Query(storage.Query{
@@ -521,9 +533,9 @@ func TestMixed_OverwriteReflectsInQuery(t *testing.T) {
 func TestMixed_FullLifecycle_SaveQueryCommandHydrate(t *testing.T) {
 	_, store, cmds := env(t)
 
-	saveEntity(t, store, PluginID, "asterisk", "server", "pbx", "Asterisk PBX",
+	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "Asterisk PBX",
 		PBX{Connected: true, Version: "20.5.0"})
-	saveEntity(t, store, PluginID, "asterisk", "ext_100", "sip_endpoint", "Extension 100",
+	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Extension 100",
 		SIPEndpoint{Registered: true, InCall: false})
 
 	// Query for all pbx entities
@@ -533,27 +545,27 @@ func TestMixed_FullLifecycle_SaveQueryCommandHydrate(t *testing.T) {
 	}
 
 	// Hydrate the PBX from query result
-	var pbxEntity domain.Entity
-	if err := json.Unmarshal(pbxEntities[0].Data, &pbxEntity); err != nil {
+	var pbxEnt domain.Entity
+	if err := json.Unmarshal(pbxEntities[0].Data, &pbxEnt); err != nil {
 		t.Fatalf("unmarshal pbx: %v", err)
 	}
-	s, ok := pbxEntity.State.(PBX)
+	s, ok := pbxEnt.State.(PBX)
 	if !ok {
-		t.Fatalf("hydrated pbx: got %T, want PBX", pbxEntity.State)
+		t.Fatalf("hydrated pbx: got %T, want PBX", pbxEnt.State)
 	}
 	if s.Version != "20.5.0" {
 		t.Errorf("version: got %q, want 20.5.0", s.Version)
 	}
 
 	// Send custom command to the PBX
-	got := sendAndReceive(t, cmds, pbxEntity, PBXReload{}, PluginID+".>")
+	got := sendAndReceive(t, cmds, pbxEnt, PBXReload{}, PluginID+".>")
 	if _, ok := got.(PBXReload); !ok {
 		t.Fatalf("command type: got %T, want PBXReload", got)
 	}
 
 	// Send custom command to the endpoint
-	endpointEntity := domain.Entity{ID: "ext_100", Plugin: PluginID, DeviceID: "asterisk", Type: "sip_endpoint"}
-	gotCall := sendAndReceive(t, cmds, endpointEntity,
+	endpointEnt := domain.Entity{ID: endpointEntity, Plugin: PluginID, DeviceID: "ext_100", Type: "sip_endpoint"}
+	gotCall := sendAndReceive(t, cmds, endpointEnt,
 		SIPCallOriginate{Extension: "200"}, PluginID+".>")
 	originate, ok := gotCall.(SIPCallOriginate)
 	if !ok {
