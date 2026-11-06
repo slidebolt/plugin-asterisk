@@ -33,18 +33,6 @@ Feature: SIP Call Entity
     When I send "sip_hangup" to "test.call_abc.state"
     Then the received command action is "sip_hangup"
 
-  Scenario: Command sip_transfer dispatches
-    Given a command listener on "test.>"
-    When I send "sip_transfer" with extension "300" to "test.call_abc.state"
-    Then the received command action is "sip_transfer"
-
-  Scenario: Raw payload decodes to canonical state
-    When I decode a "sip_call" payload '{"state":"up","caller":"100","callee":"200","duration":120}'
-    Then the call state is "up"
-    And the call caller is "100"
-    And the call callee is "200"
-    And the call duration is 120
-
   Scenario: Internal data is stored and hidden from queries
     Given a sip_call entity "test.call_abc.state" named "Call" with state "up" caller "100" callee "200" duration 30
     And I write internal data for "test.call_abc.state" with payload '{"channel":"SIP/100-00000001","uniqueid":"1234567890.1"}'

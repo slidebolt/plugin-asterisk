@@ -186,7 +186,7 @@ func TestCrossCutting_MultiPluginIsolation(t *testing.T) {
 
 func TestCrossCutting_QueryAllRegistered(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "VoIP.ms",
+	saveEntity(t, store, PluginID, "trunk_main", trunkEntity, "sip_trunk", "Main Trunk",
 		SIPTrunk{Registered: true})
 	saveEntity(t, store, PluginID, "trunk_other", trunkEntity, "sip_trunk", "Other Trunk",
 		SIPTrunk{Registered: false})
@@ -222,15 +222,15 @@ func TestCustom_PBX_SaveGetHydrate(t *testing.T) {
 
 func TestCustom_SIPTrunk_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "VoIP.ms",
-		SIPTrunk{Registered: true, Host: "chicago3.voip.ms", Port: 5060, Latency: 25})
+	saveEntity(t, store, PluginID, "trunk_main", trunkEntity, "sip_trunk", "Main Trunk",
+		SIPTrunk{Registered: true, Host: "sip.example.com", Port: 5060, Latency: 25})
 
-	got := getEntity(t, store, PluginID, "trunk_voipms", trunkEntity)
+	got := getEntity(t, store, PluginID, "trunk_main", trunkEntity)
 	s, ok := got.State.(SIPTrunk)
 	if !ok {
 		t.Fatalf("state type: got %T, want SIPTrunk", got.State)
 	}
-	if !s.Registered || s.Host != "chicago3.voip.ms" || s.Port != 5060 || s.Latency != 25 {
+	if !s.Registered || s.Host != "sip.example.com" || s.Port != 5060 || s.Latency != 25 {
 		t.Errorf("state: %+v", s)
 	}
 }
@@ -238,14 +238,14 @@ func TestCustom_SIPTrunk_SaveGetHydrate(t *testing.T) {
 func TestCustom_SIPEndpoint_SaveGetHydrate(t *testing.T) {
 	_, store, _ := env(t)
 	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Extension 100",
-		SIPEndpoint{Registered: true, InCall: false, IP: "192.168.88.50", Agent: "Yealink T54W"})
+		SIPEndpoint{Registered: true, InCall: false, IP: "10.0.0.50", Agent: "Yealink T54W"})
 
 	got := getEntity(t, store, PluginID, "ext_100", endpointEntity)
 	s, ok := got.State.(SIPEndpoint)
 	if !ok {
 		t.Fatalf("state type: got %T, want SIPEndpoint", got.State)
 	}
-	if !s.Registered || s.InCall || s.IP != "192.168.88.50" || s.Agent != "Yealink T54W" {
+	if !s.Registered || s.InCall || s.IP != "10.0.0.50" || s.Agent != "Yealink T54W" {
 		t.Errorf("state: %+v", s)
 	}
 }
@@ -265,43 +265,13 @@ func TestCustom_SIPCall_SaveGetHydrate(t *testing.T) {
 	}
 }
 
-func TestCustom_Voicemail_SaveGetHydrate(t *testing.T) {
-	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM 100",
-		Voicemail{NewMessages: 3, OldMessages: 7, Mailbox: "100"})
-
-	got := getEntity(t, store, PluginID, "voicemail_100", vmEntity)
-	s, ok := got.State.(Voicemail)
-	if !ok {
-		t.Fatalf("state type: got %T, want Voicemail", got.State)
-	}
-	if s.NewMessages != 3 || s.OldMessages != 7 || s.Mailbox != "100" {
-		t.Errorf("state: %+v", s)
-	}
-}
-
-func TestCustom_CallQueue_SaveGetHydrate(t *testing.T) {
-	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "queue_support", queueEntity, "call_queue", "Support Queue",
-		CallQueue{Callers: 5, Available: 2, Strategy: "ringall", Holdtime: 45})
-
-	got := getEntity(t, store, PluginID, "queue_support", queueEntity)
-	s, ok := got.State.(CallQueue)
-	if !ok {
-		t.Fatalf("state type: got %T, want CallQueue", got.State)
-	}
-	if s.Callers != 5 || s.Available != 2 || s.Strategy != "ringall" || s.Holdtime != 45 {
-		t.Errorf("state: %+v", s)
-	}
-}
-
 // ==========================================================================
 // Query by custom fields
 // ==========================================================================
 
 func TestCustom_QueryByType(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "VoIP.ms", SIPTrunk{Registered: true})
+	saveEntity(t, store, PluginID, "trunk_main", trunkEntity, "sip_trunk", "Main Trunk", SIPTrunk{Registered: true})
 	saveEntity(t, store, PluginID, "trunk_other", trunkEntity, "sip_trunk", "Other", SIPTrunk{Registered: false})
 	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext 100", SIPEndpoint{Registered: true})
 
@@ -332,27 +302,6 @@ func TestCustom_QueryEndpointsInCall(t *testing.T) {
 	}
 }
 
-func TestCustom_QueryVoicemailWithNewMessages(t *testing.T) {
-	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM 100",
-		Voicemail{NewMessages: 3, Mailbox: "100"})
-	saveEntity(t, store, PluginID, "voicemail_200", vmEntity, "voicemail", "VM 200",
-		Voicemail{NewMessages: 0, Mailbox: "200"})
-
-	entries, err := store.Query(storage.Query{
-		Where: []storage.Filter{
-			{Field: "type", Op: storage.Eq, Value: "voicemail"},
-			{Field: "state.new_messages", Op: storage.Gt, Value: float64(0)},
-		},
-	})
-	if err != nil {
-		t.Fatalf("query: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("voicemails with new msgs: got %d, want 1", len(entries))
-	}
-}
-
 // ==========================================================================
 // Command dispatch
 // ==========================================================================
@@ -360,21 +309,21 @@ func TestCustom_QueryVoicemailWithNewMessages(t *testing.T) {
 func TestCommand_PBXReload(t *testing.T) {
 	_, _, cmds := env(t)
 	entity := domain.Entity{ID: pbxEntity, Plugin: PluginID, DeviceID: "server", Type: "pbx"}
-	got := sendAndReceive(t, cmds, entity, PBXReload{}, PluginID+".>")
-	if _, ok := got.(PBXReload); !ok {
+	got := sendAndReceive(t, cmds, entity, domain.PBXReload{}, PluginID+".>")
+	if _, ok := got.(domain.PBXReload); !ok {
 		t.Fatalf("type: got %T, want PBXReload", got)
 	}
 }
 
-func TestCommand_SIPCallOriginate(t *testing.T) {
+func TestCommand_SIPDial(t *testing.T) {
 	_, _, cmds := env(t)
 	entity := domain.Entity{ID: endpointEntity, Plugin: PluginID, DeviceID: "ext_100", Type: "sip_endpoint"}
-	got := sendAndReceive(t, cmds, entity, SIPCallOriginate{Extension: "200", Context: "internal"}, PluginID+".>")
-	cmd, ok := got.(SIPCallOriginate)
+	got := sendAndReceive(t, cmds, entity, domain.SIPDial{Call: "front-door", RingSeconds: 30}, PluginID+".>")
+	cmd, ok := got.(domain.SIPDial)
 	if !ok {
-		t.Fatalf("type: got %T, want SIPCallOriginate", got)
+		t.Fatalf("type: got %T, want SIPDial", got)
 	}
-	if cmd.Extension != "200" || cmd.Context != "internal" {
+	if cmd.Call != "front-door" || cmd.RingSeconds != 30 {
 		t.Errorf("command: %+v", cmd)
 	}
 }
@@ -382,39 +331,9 @@ func TestCommand_SIPCallOriginate(t *testing.T) {
 func TestCommand_SIPHangup(t *testing.T) {
 	_, _, cmds := env(t)
 	entity := domain.Entity{ID: callEntity, Plugin: PluginID, DeviceID: "call_abc", Type: "sip_call"}
-	got := sendAndReceive(t, cmds, entity, SIPHangup{Channel: "SIP/100-00000001"}, PluginID+".>")
-	cmd, ok := got.(SIPHangup)
-	if !ok {
+	got := sendAndReceive(t, cmds, entity, domain.SIPHangup{}, PluginID+".>")
+	if _, ok := got.(domain.SIPHangup); !ok {
 		t.Fatalf("type: got %T, want SIPHangup", got)
-	}
-	if cmd.Channel != "SIP/100-00000001" {
-		t.Errorf("channel: got %q", cmd.Channel)
-	}
-}
-
-func TestCommand_SIPTransfer(t *testing.T) {
-	_, _, cmds := env(t)
-	entity := domain.Entity{ID: callEntity, Plugin: PluginID, DeviceID: "call_abc", Type: "sip_call"}
-	got := sendAndReceive(t, cmds, entity, SIPTransfer{Extension: "300"}, PluginID+".>")
-	cmd, ok := got.(SIPTransfer)
-	if !ok {
-		t.Fatalf("type: got %T, want SIPTransfer", got)
-	}
-	if cmd.Extension != "300" {
-		t.Errorf("extension: got %q", cmd.Extension)
-	}
-}
-
-func TestCommand_VoicemailDelete(t *testing.T) {
-	_, _, cmds := env(t)
-	entity := domain.Entity{ID: vmEntity, Plugin: PluginID, DeviceID: "voicemail_100", Type: "voicemail"}
-	got := sendAndReceive(t, cmds, entity, VoicemailDelete{Mailbox: "100"}, PluginID+".>")
-	cmd, ok := got.(VoicemailDelete)
-	if !ok {
-		t.Fatalf("type: got %T, want VoicemailDelete", got)
-	}
-	if cmd.Mailbox != "100" {
-		t.Errorf("mailbox: got %q", cmd.Mailbox)
 	}
 }
 
@@ -422,37 +341,9 @@ func TestCommand_VoicemailDelete(t *testing.T) {
 // Mixed entities: all types coexist and query in isolation
 // ==========================================================================
 
-func TestMixed_QueryEachTypeInIsolation(t *testing.T) {
-	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "server", pbxEntity, "pbx", "PBX", PBX{Connected: true})
-	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "Trunk", SIPTrunk{Registered: true})
-	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext", SIPEndpoint{Registered: true})
-	saveEntity(t, store, PluginID, "call_abc", callEntity, "sip_call", "Call", SIPCall{State: "up"})
-	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM", Voicemail{NewMessages: 1})
-	saveEntity(t, store, PluginID, "queue_support", queueEntity, "call_queue", "Queue", CallQueue{Callers: 2})
-
-	tests := []struct {
-		typ   string
-		count int
-	}{
-		{"pbx", 1},
-		{"sip_trunk", 1},
-		{"sip_endpoint", 1},
-		{"sip_call", 1},
-		{"voicemail", 1},
-		{"call_queue", 1},
-	}
-	for _, tc := range tests {
-		entries := queryByType(t, store, tc.typ)
-		if len(entries) != tc.count {
-			t.Errorf("%s: got %d, want %d", tc.typ, len(entries), tc.count)
-		}
-	}
-}
-
 func TestMixed_CustomAndBuiltinBoolField(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "Trunk",
+	saveEntity(t, store, PluginID, "trunk_main", trunkEntity, "sip_trunk", "Trunk",
 		SIPTrunk{Registered: true})
 	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext",
 		SIPEndpoint{Registered: true, InCall: true})
@@ -495,10 +386,10 @@ func TestMixed_PatternIsolatesPlugin(t *testing.T) {
 
 func TestMixed_DeleteCustomDoesNotAffectOther(t *testing.T) {
 	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "trunk_voipms", trunkEntity, "sip_trunk", "Trunk", SIPTrunk{Registered: true})
+	saveEntity(t, store, PluginID, "trunk_main", trunkEntity, "sip_trunk", "Trunk", SIPTrunk{Registered: true})
 	saveEntity(t, store, PluginID, "ext_100", endpointEntity, "sip_endpoint", "Ext", SIPEndpoint{Registered: true})
 
-	store.Delete(domain.EntityKey{Plugin: PluginID, DeviceID: "trunk_voipms", ID: trunkEntity})
+	store.Delete(domain.EntityKey{Plugin: PluginID, DeviceID: "trunk_main", ID: trunkEntity})
 
 	entries := queryByType(t, store, "sip_trunk")
 	if len(entries) != 0 {
@@ -508,25 +399,6 @@ func TestMixed_DeleteCustomDoesNotAffectOther(t *testing.T) {
 	entries = queryByType(t, store, "sip_endpoint")
 	if len(entries) != 1 {
 		t.Fatalf("sip_endpoints after delete: got %d, want 1", len(entries))
-	}
-}
-
-func TestMixed_OverwriteReflectsInQuery(t *testing.T) {
-	_, store, _ := env(t)
-	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM",
-		Voicemail{NewMessages: 0, Mailbox: "100"})
-
-	saveEntity(t, store, PluginID, "voicemail_100", vmEntity, "voicemail", "VM",
-		Voicemail{NewMessages: 5, Mailbox: "100"})
-
-	entries, _ := store.Query(storage.Query{
-		Where: []storage.Filter{
-			{Field: "type", Op: storage.Eq, Value: "voicemail"},
-			{Field: "state.new_messages", Op: storage.Gt, Value: float64(0)},
-		},
-	})
-	if len(entries) != 1 {
-		t.Fatalf("after overwrite: got %d, want 1", len(entries))
 	}
 }
 
@@ -558,20 +430,15 @@ func TestMixed_FullLifecycle_SaveQueryCommandHydrate(t *testing.T) {
 	}
 
 	// Send custom command to the PBX
-	got := sendAndReceive(t, cmds, pbxEnt, PBXReload{}, PluginID+".>")
-	if _, ok := got.(PBXReload); !ok {
+	got := sendAndReceive(t, cmds, pbxEnt, domain.PBXReload{}, PluginID+".>")
+	if _, ok := got.(domain.PBXReload); !ok {
 		t.Fatalf("command type: got %T, want PBXReload", got)
 	}
 
 	// Send custom command to the endpoint
 	endpointEnt := domain.Entity{ID: endpointEntity, Plugin: PluginID, DeviceID: "ext_100", Type: "sip_endpoint"}
-	gotCall := sendAndReceive(t, cmds, endpointEnt,
-		SIPCallOriginate{Extension: "200"}, PluginID+".>")
-	originate, ok := gotCall.(SIPCallOriginate)
-	if !ok {
-		t.Fatalf("command type: got %T, want SIPCallOriginate", gotCall)
-	}
-	if originate.Extension != "200" {
-		t.Errorf("extension: got %q, want 200", originate.Extension)
+	gotCall := sendAndReceive(t, cmds, endpointEnt, domain.SIPDial{Call: "c"}, PluginID+".>")
+	if dial, ok := gotCall.(domain.SIPDial); !ok || dial.Call != "c" {
+		t.Fatalf("command: got %T %+v", gotCall, gotCall)
 	}
 }

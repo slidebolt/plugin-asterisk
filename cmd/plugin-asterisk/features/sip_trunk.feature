@@ -1,18 +1,18 @@
 Feature: SIP Trunk Entity
-  Represents a SIP trunk connection (e.g. VoIP.ms).
+  Represents a SIP trunk connection (e.g. Main Trunk).
 
   Scenario: Create with default state
-    Given a sip_trunk entity "test.trunk_voipms.registration" named "VoIP.ms" with registered false host "chicago3.voip.ms"
-    When I retrieve "test.trunk_voipms.registration"
+    Given a sip_trunk entity "test.trunk_main.registration" named "Main Trunk" with registered false host "sip.example.com"
+    When I retrieve "test.trunk_main.registration"
     Then the entity type is "sip_trunk"
     And the trunk registered is false
-    And the trunk host is "chicago3.voip.ms"
+    And the trunk host is "sip.example.com"
 
   Scenario: State fields hydrate correctly
-    Given a sip_trunk entity "test.trunk_voipms.registration" named "VoIP.ms" with registered true host "chicago3.voip.ms" port 5060 latency 25
-    When I retrieve "test.trunk_voipms.registration"
+    Given a sip_trunk entity "test.trunk_main.registration" named "Main Trunk" with registered true host "sip.example.com" port 5060 latency 25
+    When I retrieve "test.trunk_main.registration"
     Then the trunk registered is true
-    And the trunk host is "chicago3.voip.ms"
+    And the trunk host is "sip.example.com"
     And the trunk latency is 25
 
   Scenario: Query by type
@@ -40,14 +40,9 @@ Feature: SIP Trunk Entity
     When I delete "test.trunkDel.registration"
     Then retrieving "test.trunkDel.registration" should fail
 
-  Scenario: Raw payload decodes to canonical state
-    When I decode a "sip_trunk" payload '{"registered":true,"host":"chicago3.voip.ms","port":5060}'
-    Then the trunk registered is true
-    And the trunk host is "chicago3.voip.ms"
-
   Scenario: Internal data is stored and hidden from queries
-    Given a sip_trunk entity "test.trunk_voipms.registration" named "Trunk" with registered true host "voip.ms"
-    And I write internal data for "test.trunk_voipms.registration" with payload '{"peerName":"voipms","qualify":"yes"}'
-    When I read internal data for "test.trunk_voipms.registration"
-    Then the internal data matches '{"peerName":"voipms","qualify":"yes"}'
+    Given a sip_trunk entity "test.trunk_main.registration" named "Trunk" with registered true host "sip.example.com"
+    And I write internal data for "test.trunk_main.registration" with payload '{"peerName":"trunk1","qualify":"yes"}'
+    When I read internal data for "test.trunk_main.registration"
+    Then the internal data matches '{"peerName":"trunk1","qualify":"yes"}'
     And querying type "sip_trunk" returns only state entities

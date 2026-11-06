@@ -8,11 +8,11 @@ Feature: SIP Endpoint Entity
     And the endpoint registered is false
 
   Scenario: State fields hydrate correctly
-    Given a sip_endpoint entity "test.ext_100.registration" named "Extension 100" with registered true in_call false ip "192.168.88.50"
+    Given a sip_endpoint entity "test.ext_100.registration" named "Extension 100" with registered true in_call false ip "10.0.0.50"
     When I retrieve "test.ext_100.registration"
     Then the endpoint registered is true
     And the endpoint in_call is false
-    And the endpoint ip is "192.168.88.50"
+    And the endpoint ip is "10.0.0.50"
 
   Scenario: Query by type
     Given a sip_endpoint entity "test.ext100.registration" named "Ext 100" with registered true
@@ -22,8 +22,8 @@ Feature: SIP Endpoint Entity
     And the results do not include "test.trunk1.registration"
 
   Scenario: Query endpoints in call
-    Given a sip_endpoint entity "test.ext100.registration" named "Ext 100" with registered true in_call true ip "192.168.88.50"
-    And a sip_endpoint entity "test.ext200.registration" named "Ext 200" with registered true in_call false ip "192.168.88.51"
+    Given a sip_endpoint entity "test.ext100.registration" named "Ext 100" with registered true in_call true ip "10.0.0.50"
+    And a sip_endpoint entity "test.ext200.registration" named "Ext 200" with registered true in_call false ip "10.0.0.51"
     When I query where "type" equals "sip_endpoint" and "state.in_call" equals "true"
     Then I get 1 result
     And the results include "test.ext100.registration"
@@ -39,29 +39,14 @@ Feature: SIP Endpoint Entity
     When I delete "test.extDel.registration"
     Then retrieving "test.extDel.registration" should fail
 
-  Scenario: Command sip_call dispatches
-    Given a command listener on "test.>"
-    When I send "sip_call" with extension "200" to "test.ext_100.registration"
-    Then the received command action is "sip_call"
-
   Scenario: Command sip_hangup dispatches
     Given a command listener on "test.>"
     When I send "sip_hangup" to "test.ext_100.registration"
     Then the received command action is "sip_hangup"
 
-  Scenario: Raw payload decodes to canonical state
-    When I decode a "sip_endpoint" payload '{"registered":true,"in_call":false,"ip":"192.168.88.50"}'
-    Then the endpoint registered is true
-    And the endpoint in_call is false
-    And the endpoint ip is "192.168.88.50"
-
-  Scenario: Encode sip_call produces wire format
-    When I encode "sip_call" command with '{"extension":"200","context":"internal"}'
-    Then the wire payload field "extension" equals "200"
-
   Scenario: Internal data is stored and hidden from queries
     Given a sip_endpoint entity "test.ext_100.registration" named "Ext 100" with registered true
-    And I write internal data for "test.ext_100.registration" with payload '{"aorContact":"sip:100@192.168.88.50:5060"}'
+    And I write internal data for "test.ext_100.registration" with payload '{"aorContact":"sip:100@10.0.0.50:5060"}'
     When I read internal data for "test.ext_100.registration"
-    Then the internal data matches '{"aorContact":"sip:100@192.168.88.50:5060"}'
+    Then the internal data matches '{"aorContact":"sip:100@10.0.0.50:5060"}'
     And querying type "sip_endpoint" returns only state entities

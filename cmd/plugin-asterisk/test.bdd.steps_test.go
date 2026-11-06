@@ -5,7 +5,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +16,6 @@ import (
 	testkit "github.com/slidebolt/sb-testkit"
 
 	"github.com/slidebolt/plugin-asterisk/app"
-	translate "github.com/slidebolt/plugin-asterisk/internal/translate"
 )
 
 // ---------------------------------------------------------------------------
@@ -34,7 +32,6 @@ type bddCtx struct {
 	lastGetErr       error
 	lastEntries      []storage.Entry
 	lastInternalData json.RawMessage
-	lastWirePayload  json.RawMessage
 
 	cmdReceived chan string
 	cmdSub      messenger.Subscription
@@ -180,33 +177,7 @@ func (c *bddCtx) aSIPCallEntity(key, name, state, caller, callee string, duratio
 	})
 }
 
-// Voicemail
-
-func (c *bddCtx) aVoicemailEntity(key, name string, newMsgs, oldMsgs int, mailbox string) error {
-	plug, dev, id, err := parseKey(key)
-	if err != nil {
-		return err
-	}
-	return c.saveEntity(domain.Entity{
-		ID: id, Plugin: plug, DeviceID: dev,
-		Type: "voicemail", Name: name,
-		State: app.Voicemail{NewMessages: newMsgs, OldMessages: oldMsgs, Mailbox: mailbox},
-	})
-}
-
 // Call Queue
-
-func (c *bddCtx) aCallQueueEntity(key, name string, callers, available int, strategy string) error {
-	plug, dev, id, err := parseKey(key)
-	if err != nil {
-		return err
-	}
-	return c.saveEntity(domain.Entity{
-		ID: id, Plugin: plug, DeviceID: dev,
-		Type: "call_queue", Name: name,
-		State: app.CallQueue{Callers: callers, Available: available, Strategy: strategy},
-	})
-}
 
 // ---------------------------------------------------------------------------
 // Update steps
@@ -245,18 +216,6 @@ func (c *bddCtx) updateEndpointInCall(key string, inCall string) error {
 		ID: id, Plugin: plug, DeviceID: dev,
 		Type:  "sip_endpoint",
 		State: app.SIPEndpoint{Registered: true, InCall: inCall == "true"},
-	})
-}
-
-func (c *bddCtx) updateVoicemailMessages(key string, newMsgs, oldMsgs int) error {
-	plug, dev, id, err := parseKey(key)
-	if err != nil {
-		return err
-	}
-	return c.saveEntity(domain.Entity{
-		ID: id, Plugin: plug, DeviceID: dev,
-		Type:  "voicemail",
-		State: app.Voicemail{NewMessages: newMsgs, OldMessages: oldMsgs},
 	})
 }
 
@@ -517,84 +476,8 @@ func (c *bddCtx) callDurationIs(expected int) error {
 }
 
 // ---------------------------------------------------------------------------
-// Assertion steps: Voicemail
-// ---------------------------------------------------------------------------
-
-func (c *bddCtx) voicemailNewIs(expected int) error {
-	if c.lastGetErr != nil {
-		return fmt.Errorf("retrieve failed: %w", c.lastGetErr)
-	}
-	st, ok := c.lastEntity.State.(app.Voicemail)
-	if !ok {
-		return fmt.Errorf("state type: got %T, want app.Voicemail", c.lastEntity.State)
-	}
-	if st.NewMessages != expected {
-		return fmt.Errorf("voicemail.NewMessages: got %d, want %d", st.NewMessages, expected)
-	}
-	return nil
-}
-
-func (c *bddCtx) voicemailOldIs(expected int) error {
-	if c.lastGetErr != nil {
-		return fmt.Errorf("retrieve failed: %w", c.lastGetErr)
-	}
-	st := c.lastEntity.State.(app.Voicemail)
-	if st.OldMessages != expected {
-		return fmt.Errorf("voicemail.OldMessages: got %d, want %d", st.OldMessages, expected)
-	}
-	return nil
-}
-
-func (c *bddCtx) voicemailMailboxIs(expected string) error {
-	if c.lastGetErr != nil {
-		return fmt.Errorf("retrieve failed: %w", c.lastGetErr)
-	}
-	st := c.lastEntity.State.(app.Voicemail)
-	if st.Mailbox != expected {
-		return fmt.Errorf("voicemail.Mailbox: got %q, want %q", st.Mailbox, expected)
-	}
-	return nil
-}
-
-// ---------------------------------------------------------------------------
 // Assertion steps: Call Queue
 // ---------------------------------------------------------------------------
-
-func (c *bddCtx) queueCallersIs(expected int) error {
-	if c.lastGetErr != nil {
-		return fmt.Errorf("retrieve failed: %w", c.lastGetErr)
-	}
-	st, ok := c.lastEntity.State.(app.CallQueue)
-	if !ok {
-		return fmt.Errorf("state type: got %T, want app.CallQueue", c.lastEntity.State)
-	}
-	if st.Callers != expected {
-		return fmt.Errorf("queue.Callers: got %d, want %d", st.Callers, expected)
-	}
-	return nil
-}
-
-func (c *bddCtx) queueAvailableIs(expected int) error {
-	if c.lastGetErr != nil {
-		return fmt.Errorf("retrieve failed: %w", c.lastGetErr)
-	}
-	st := c.lastEntity.State.(app.CallQueue)
-	if st.Available != expected {
-		return fmt.Errorf("queue.Available: got %d, want %d", st.Available, expected)
-	}
-	return nil
-}
-
-func (c *bddCtx) queueStrategyIs(expected string) error {
-	if c.lastGetErr != nil {
-		return fmt.Errorf("retrieve failed: %w", c.lastGetErr)
-	}
-	st := c.lastEntity.State.(app.CallQueue)
-	if st.Strategy != expected {
-		return fmt.Errorf("queue.Strategy: got %q, want %q", st.Strategy, expected)
-	}
-	return nil
-}
 
 // ---------------------------------------------------------------------------
 // Command Dispatch steps
@@ -631,33 +514,6 @@ func (c *bddCtx) iSendCommandTo(action, key string) error {
 	return c.cmds.Send(target, cmd)
 }
 
-func (c *bddCtx) iSendSIPCallTo(extension, key string) error {
-	plug, dev, id, err := parseKey(key)
-	if err != nil {
-		return err
-	}
-	target := domain.EntityKey{Plugin: plug, DeviceID: dev, ID: id}
-	return c.cmds.Send(target, app.SIPCallOriginate{Extension: extension})
-}
-
-func (c *bddCtx) iSendSIPTransferTo(extension, key string) error {
-	plug, dev, id, err := parseKey(key)
-	if err != nil {
-		return err
-	}
-	target := domain.EntityKey{Plugin: plug, DeviceID: dev, ID: id}
-	return c.cmds.Send(target, app.SIPTransfer{Extension: extension})
-}
-
-func (c *bddCtx) iSendVoicemailDeleteTo(mailbox, key string) error {
-	plug, dev, id, err := parseKey(key)
-	if err != nil {
-		return err
-	}
-	target := domain.EntityKey{Plugin: plug, DeviceID: dev, ID: id}
-	return c.cmds.Send(target, app.VoicemailDelete{Mailbox: mailbox})
-}
-
 func (c *bddCtx) receivedCommandActionIs(expected string) error {
 	select {
 	case got := <-c.cmdReceived:
@@ -676,25 +532,6 @@ func actionNameOf(cmd any) string {
 		return n.ActionName()
 	}
 	return fmt.Sprintf("unknown(%T)", cmd)
-}
-
-func makeCommand(action string) (messenger.Action, error) {
-	switch action {
-	case "pbx_reload":
-		return app.PBXReload{}, nil
-	case "sip_call":
-		return app.SIPCallOriginate{Extension: "200"}, nil
-	case "sip_hangup":
-		return app.SIPHangup{Channel: "SIP/100-00000001"}, nil
-	case "sip_transfer":
-		return app.SIPTransfer{Extension: "300"}, nil
-	case "sip_mute":
-		return app.SIPMute{Muted: true}, nil
-	case "voicemail_delete":
-		return app.VoicemailDelete{Mailbox: "100"}, nil
-	default:
-		return nil, fmt.Errorf("unknown action %q", action)
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -849,69 +686,6 @@ func (c *bddCtx) queryingTypeReturnsOnlyStateEntities(typ string) error {
 // Translate: Decode and Encode steps
 // ---------------------------------------------------------------------------
 
-func (c *bddCtx) iDecodePayloadAs(typeName, rawJSON string) error {
-	state, ok := translate.Decode(typeName, json.RawMessage(rawJSON))
-	if !ok {
-		return fmt.Errorf("Decode(%q, %s) returned false", typeName, rawJSON)
-	}
-	c.lastEntity.State = state
-	c.lastGetErr = nil
-	return nil
-}
-
-func (c *bddCtx) iEncodeCommandWithJSON(action, jsonPayload string) error {
-	typ, ok := domain.LookupCommand(action)
-	if !ok {
-		return fmt.Errorf("unknown action %q", action)
-	}
-	v := reflect.New(typ).Interface()
-	if err := json.Unmarshal([]byte(jsonPayload), v); err != nil {
-		return fmt.Errorf("unmarshal command %q: %w", action, err)
-	}
-	cmd := reflect.ValueOf(v).Elem().Interface()
-	out, err := translate.Encode(cmd, nil)
-	if err != nil {
-		return fmt.Errorf("Encode(%q): %w", action, err)
-	}
-	c.lastWirePayload = out
-	return nil
-}
-
-func (c *bddCtx) wirePayloadFieldEqualsNum(field string, expected float64) error {
-	var m map[string]any
-	if err := json.Unmarshal(c.lastWirePayload, &m); err != nil {
-		return fmt.Errorf("wire payload is not JSON: %w", err)
-	}
-	v, ok := m[field]
-	if !ok {
-		return fmt.Errorf("wire payload missing field %q; got %s", field, c.lastWirePayload)
-	}
-	got, ok := v.(float64)
-	if !ok {
-		return fmt.Errorf("wire payload field %q: got %T (%v), want float64", field, v, v)
-	}
-	if got != expected {
-		return fmt.Errorf("wire payload field %q: got %v, want %v", field, got, expected)
-	}
-	return nil
-}
-
-func (c *bddCtx) wirePayloadFieldEqualsString(field, expected string) error {
-	var m map[string]any
-	if err := json.Unmarshal(c.lastWirePayload, &m); err != nil {
-		return fmt.Errorf("wire payload is not JSON: %w", err)
-	}
-	v, ok := m[field]
-	if !ok {
-		return fmt.Errorf("wire payload missing field %q; got %s", field, c.lastWirePayload)
-	}
-	got := fmt.Sprintf("%v", v)
-	if got != expected {
-		return fmt.Errorf("wire payload field %q: got %q, want %q", field, got, expected)
-	}
-	return nil
-}
-
 // ---------------------------------------------------------------------------
 // Step registration
 // ---------------------------------------------------------------------------
@@ -925,14 +699,11 @@ func (c *bddCtx) RegisterSteps(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a sip_endpoint entity "([^"]*)" named "([^"]*)" with registered (true|false)$`, c.aSIPEndpointEntity)
 	ctx.Step(`^a sip_endpoint entity "([^"]*)" named "([^"]*)" with registered (true|false) in_call (true|false) ip "([^"]*)"$`, c.aSIPEndpointEntityFull)
 	ctx.Step(`^a sip_call entity "([^"]*)" named "([^"]*)" with state "([^"]*)" caller "([^"]*)" callee "([^"]*)" duration (\d+)$`, c.aSIPCallEntity)
-	ctx.Step(`^a voicemail entity "([^"]*)" named "([^"]*)" with new_messages (\d+) old_messages (\d+) mailbox "([^"]*)"$`, c.aVoicemailEntity)
-	ctx.Step(`^a call_queue entity "([^"]*)" named "([^"]*)" with callers (\d+) available (\d+) strategy "([^"]*)"$`, c.aCallQueueEntity)
 
 	// --- Update steps ---
 	ctx.Step(`^I update pbx "([^"]*)" to connected (true|false)$`, c.updatePBXConnected)
 	ctx.Step(`^I update trunk "([^"]*)" to registered (true|false)$`, c.updateTrunkRegistered)
 	ctx.Step(`^I update endpoint "([^"]*)" to in_call (true|false)$`, c.updateEndpointInCall)
-	ctx.Step(`^I update voicemail "([^"]*)" to new_messages (\d+) old_messages (\d+)$`, c.updateVoicemailMessages)
 	ctx.Step(`^I update call "([^"]*)" to state "([^"]*)"$`, c.updateCallState)
 
 	// --- Lifecycle ---
@@ -965,22 +736,11 @@ func (c *bddCtx) RegisterSteps(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the call callee is "([^"]*)"$`, c.callCalleeIs)
 	ctx.Step(`^the call duration is (\d+)$`, c.callDurationIs)
 
-	// --- Assertions: Voicemail ---
-	ctx.Step(`^the voicemail new_messages is (\d+)$`, c.voicemailNewIs)
-	ctx.Step(`^the voicemail old_messages is (\d+)$`, c.voicemailOldIs)
-	ctx.Step(`^the voicemail mailbox is "([^"]*)"$`, c.voicemailMailboxIs)
-
 	// --- Assertions: Call Queue ---
-	ctx.Step(`^the queue callers is (\d+)$`, c.queueCallersIs)
-	ctx.Step(`^the queue available is (\d+)$`, c.queueAvailableIs)
-	ctx.Step(`^the queue strategy is "([^"]*)"$`, c.queueStrategyIs)
 
 	// --- Command dispatch ---
 	ctx.Step(`^a command listener on "([^"]*)"$`, c.aCommandListenerOn)
 	ctx.Step(`^I send "([^"]*)" to "([^"]*)"$`, c.iSendCommandTo)
-	ctx.Step(`^I send "sip_call" with extension "([^"]*)" to "([^"]*)"$`, c.iSendSIPCallTo)
-	ctx.Step(`^I send "sip_transfer" with extension "([^"]*)" to "([^"]*)"$`, c.iSendSIPTransferTo)
-	ctx.Step(`^I send "voicemail_delete" with mailbox "([^"]*)" to "([^"]*)"$`, c.iSendVoicemailDeleteTo)
 	ctx.Step(`^the received command action is "([^"]*)"$`, c.receivedCommandActionIs)
 
 	// --- Query DSL ---
@@ -1000,8 +760,23 @@ func (c *bddCtx) RegisterSteps(ctx *godog.ScenarioContext) {
 	ctx.Step(`^querying type "([^"]*)" returns only state entities$`, c.queryingTypeReturnsOnlyStateEntities)
 
 	// --- Translate: Decode / Encode ---
-	ctx.Step(`^I decode a "([^"]*)" payload '([^']*)'$`, c.iDecodePayloadAs)
-	ctx.Step(`^I encode "([^"]*)" command with '([^']*)'$`, c.iEncodeCommandWithJSON)
-	ctx.Step(`^the wire payload field "([^"]*)" equals (\d+(?:\.\d+)?)$`, c.wirePayloadFieldEqualsNum)
-	ctx.Step(`^the wire payload field "([^"]*)" equals "([^"]*)"$`, c.wirePayloadFieldEqualsString)
+
+	c.registerMediaStreamSteps(ctx)
+}
+
+func makeCommand(action string) (messenger.Action, error) {
+	switch action {
+	case "pbx_reload":
+		return domain.PBXReload{}, nil
+	case "sip_call":
+		return domain.SIPDial{Call: "c"}, nil
+	case "sip_hangup":
+		return domain.SIPHangup{}, nil
+	case "media_stream_start":
+		return domain.MediaStreamStart{}, nil
+	case "media_stream_stop":
+		return domain.MediaStreamStop{}, nil
+	default:
+		return nil, fmt.Errorf("unknown action %q", action)
+	}
 }

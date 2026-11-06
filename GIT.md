@@ -1,6 +1,6 @@
 # Git Workflow for plugin-asterisk
 
-This repository contains the Slidebolt Asterisk Plugin, providing integration with Asterisk PBX systems. It produces a standalone binary.
+This repository contains the Slidebolt Asterisk Plugin. It translates between `asterisk-host` and Slidebolt: every device comes from the host's REST API, and it holds no call state or behavior of its own. It produces a standalone binary.
 
 ## Dependencies
 - **Internal:**
@@ -11,6 +11,7 @@ This repository contains the Slidebolt Asterisk Plugin, providing integration wi
   - `sb-storage-sdk`: Shared storage interfaces.
   - `sb-testkit`: Testing utilities.
   - `sb-virtual`: Virtual device provider.
+- **Runtime:** `asterisk-host`, reached through `ASTERISK_HOST_URL` and `ASTERISK_HOST_TOKEN`.
 - **External:** 
   - `github.com/cucumber/godog`: BDD testing framework.
 
@@ -41,7 +42,7 @@ As an Asterisk integration plugin, `plugin-asterisk` must be updated whenever th
 6. Push the tag: `git push origin main v1.0.5`.
 
 ## Update Workflow & Verification
-1. **Modify:** Update Asterisk integration logic in `internal/` or `app/`.
+1. **Modify:** Update the host client in `internal/hostapi` or the entity mapping in `internal/mapping`. Asterisk logic belongs in `asterisk-host`.
 2. **Verify Local:**
    - Run `go mod tidy`.
    - Run `go test ./...`.

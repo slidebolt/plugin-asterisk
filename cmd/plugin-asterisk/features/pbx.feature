@@ -16,7 +16,7 @@ Feature: PBX Entity
 
   Scenario: Query by type
     Given a pbx entity "test.server.status" named "Asterisk PBX" with connected true
-    And a sip_trunk entity "test.trunk1.registration" named "Trunk" with registered true host "voip.ms"
+    And a sip_trunk entity "test.trunk1.registration" named "Trunk" with registered true host "sip.example.com"
     When I query where "type" equals "pbx"
     Then the results include "test.server.status"
     And the results do not include "test.trunk1.registration"
@@ -36,15 +36,6 @@ Feature: PBX Entity
     Given a command listener on "test.>"
     When I send "pbx_reload" to "test.server.status"
     Then the received command action is "pbx_reload"
-
-  Scenario: Raw payload decodes to canonical state
-    When I decode a "pbx" payload '{"connected":true,"version":"20.5.0","uptime":86400}'
-    Then the pbx connected is true
-    And the pbx version is "20.5.0"
-
-  Scenario: Encode pbx_reload produces wire format
-    When I encode "pbx_reload" command with '{}'
-    Then the wire payload field "action" equals "Reload"
 
   Scenario: Internal data is stored and hidden from queries
     Given a pbx entity "test.server.status" named "PBX" with connected true
