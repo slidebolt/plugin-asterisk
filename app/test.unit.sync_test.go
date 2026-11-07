@@ -303,6 +303,18 @@ func TestSync_TranscriptReachesEntity(t *testing.T) {
 	})
 }
 
+func TestSync_SpeechReachesEntity(t *testing.T) {
+	h := startSync(t, nil)
+	h.host.emit(hostapi.EventCall, hostapi.Call{ID: "agent", Status: "active", Speech: &hostapi.Speech{Status: "speaking", Seq: 1, Text: "hello"}})
+	soon(t, "speech", func() bool {
+		if !h.exists("call_agent", "speech") {
+			return false
+		}
+		s := h.get(t, "call_agent", "speech").State.(domain.Speech)
+		return s.Status == "speaking" && s.Seq == 1
+	})
+}
+
 func TestSync_EndpointEventUpdatesState(t *testing.T) {
 	h := startSync(t, nil)
 	h.host.emit(hostapi.EventEndpoint, hostapi.Endpoint{ID: "201", Name: "Kitchen Phone", Kind: "extension", Status: "online", Call: "c"})
@@ -338,6 +350,8 @@ func TestCommands_RouteToHost(t *testing.T) {
 			"POST /v1/calls/x/playbacks", `{"sound":"closed","thenHangup":true}`},
 		{"transcribe", "call_x", "call", domain.SIPTranscribeStart{}, "POST /v1/calls/x/transcription", ""},
 		{"stop transcribing", "call_x", "transcript", domain.SIPTranscribeStop{}, "DELETE /v1/calls/x/transcription", ""},
+		{"say", "call_x", "call", domain.SIPSay{Text: "eight lights are on"}, "POST /v1/calls/x/speech", `{"text":"eight lights are on"}`},
+		{"say on speech entity", "call_x", "speech", domain.SIPSay{Text: "hi"}, "POST /v1/calls/x/speech", `{"text":"hi"}`},
 		{"stream call", "call_x", "audio", domain.MediaStreamStart{}, "POST /v1/calls/x/streams", ""},
 		{"stop call stream", "call_x", "audio", domain.MediaStreamStop{}, "DELETE /v1/calls/x/streams", ""},
 		{"mute", "call_x", "p_201", domain.SIPMute{}, "POST /v1/calls/x/participants/201/commands", `{"action":"mute"}`},

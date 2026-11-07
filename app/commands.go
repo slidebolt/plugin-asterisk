@@ -95,6 +95,8 @@ func (a *App) routeCall(ctx context.Context, call string, addr messenger.Address
 		return a.host.StartTranscription(ctx, call)
 	case domain.SIPTranscribeStop:
 		return a.host.StopTranscription(ctx, call)
+	case domain.SIPSay:
+		return a.host.Say(ctx, call, hostapi.SayRequest{Text: c.Text})
 	case domain.MediaStreamStart:
 		return a.host.StartCallStream(ctx, call)
 	case domain.MediaStreamStop:

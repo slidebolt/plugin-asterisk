@@ -114,3 +114,29 @@ func TestCall_Transcript(t *testing.T) {
 		t.Fatal("call has no transcribe command")
 	}
 }
+
+func TestEndpoint_Service(t *testing.T) {
+	item := Endpoint(hostapi.Endpoint{ID: "4000", Name: "Agent", Kind: "service", Status: "online"})
+	if item.Device.ID != "ext_4000" || len(item.Entities) != 2 {
+		t.Fatalf("service = %+v", item)
+	}
+	reg := find(t, item, EntityRegistration)
+	if s := reg.State.(domain.SIPEndpoint); !s.Registered || s.Role != "service" || len(reg.Commands) != 0 {
+		t.Fatalf("registration = %+v", reg)
+	}
+}
+
+func TestCall_Speech(t *testing.T) {
+	idle := find(t, Call(hostapi.Call{ID: "x", Status: "active"}), EntitySpeech).State.(domain.Speech)
+	if idle.Status != "idle" {
+		t.Fatalf("default speech = %+v", idle)
+	}
+	item := Call(hostapi.Call{ID: "x", Status: "active", Speech: &hostapi.Speech{Status: "speaking", Seq: 3, Text: "hello"}})
+	e := find(t, item, EntitySpeech)
+	if s := e.State.(domain.Speech); e.Type != "speech" || s.Status != "speaking" || s.Seq != 3 || s.Text != "hello" {
+		t.Fatalf("speech = %+v", e)
+	}
+	if !slices.Contains(find(t, item, EntityCall).Commands, "sip_say") {
+		t.Fatal("call has no sip_say command")
+	}
+}

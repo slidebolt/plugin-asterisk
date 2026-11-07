@@ -92,6 +92,10 @@ func (c *Client) StopTranscription(ctx context.Context, call string) error {
 	return c.do(ctx, http.MethodDelete, callPath(call)+"/transcription", nil, nil)
 }
 
+func (c *Client) Say(ctx context.Context, call string, req SayRequest) error {
+	return c.do(ctx, http.MethodPost, callPath(call)+"/speech", req, nil)
+}
+
 func (c *Client) StartListen(ctx context.Context, endpoint string) error {
 	return c.do(ctx, http.MethodPost, endpointPath(endpoint)+"/listen", nil, nil)
 }

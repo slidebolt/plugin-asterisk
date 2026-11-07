@@ -25,6 +25,7 @@ const (
 	EntityAudio        = "audio"
 	EntityCall         = "call"
 	EntityTranscript   = "transcript"
+	EntitySpeech       = "speech"
 )
 
 var deviceUnsafe = regexp.MustCompile(`[^A-Za-z0-9_]`)
@@ -95,6 +96,13 @@ func Endpoint(e hostapi.Endpoint) Item {
 		return newItem(device, availability,
 			entity(d, EntityRegistration, "sip_trunk", e.Name, nil, domain.SIPTrunk{Registered: online}))
 	}
+	if e.Kind == "service" {
+		// A number SlideBolt answers. It cannot be dialed out to or hung up.
+		return newItem(device, availability,
+			entity(d, EntityRegistration, "sip_endpoint", e.Name, nil, domain.SIPEndpoint{
+				Registered: online, Status: e.Status, Role: "service",
+			}))
+	}
 
 	callState := "idle"
 	if e.Call != "" {
@@ -127,7 +135,7 @@ func Call(c hostapi.Call) Item {
 		state = "ended"
 	}
 	entities := []domain.Entity{
-		entity(d, EntityCall, "sip_call", "Call "+c.ID, []string{"sip_call", "sip_hangup", "sip_play", "sip_transcribe_start", "sip_transcribe_stop"}, domain.SIPCall{
+		entity(d, EntityCall, "sip_call", "Call "+c.ID, []string{"sip_call", "sip_hangup", "sip_play", "sip_transcribe_start", "sip_transcribe_stop", "sip_say"}, domain.SIPCall{
 			State: state, Status: c.Status, Reason: c.Reason, Duration: duration(c),
 		}),
 	}
@@ -142,6 +150,13 @@ func Call(c hostapi.Call) Item {
 	}
 	entities = append(entities, entity(d, EntityTranscript, "transcript", "Call "+c.ID+" Transcript", []string{"sip_transcribe_start", "sip_transcribe_stop"}, domain.Transcript{
 		Status: transcript.Status, Seq: transcript.Seq, Text: transcript.Text, Error: transcript.Error,
+	}))
+	speech := c.Speech
+	if speech == nil {
+		speech = &hostapi.Speech{Status: "idle"}
+	}
+	entities = append(entities, entity(d, EntitySpeech, "speech", "Call "+c.ID+" Speech", []string{"sip_say"}, domain.Speech{
+		Status: speech.Status, Seq: speech.Seq, Text: speech.Text, Error: speech.Error,
 	}))
 	for _, p := range c.Participants {
 		entities = append(entities, entity(d, participantPrefix+p.ID, "sip_participant", p.ID,

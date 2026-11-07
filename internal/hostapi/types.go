@@ -49,6 +49,17 @@ type Transcript struct {
 	Error  string `json:"error,omitempty"`
 }
 
+type Speech struct {
+	Status string `json:"status"`
+	Seq    int    `json:"seq"`
+	Text   string `json:"text,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+type SayRequest struct {
+	Text string `json:"text"`
+}
+
 type Call struct {
 	ID           string        `json:"id"`
 	Status       string        `json:"status"`
@@ -58,6 +69,7 @@ type Call struct {
 	Participants []Participant `json:"participants"`
 	Stream       *Stream       `json:"stream,omitempty"`
 	Transcript   *Transcript   `json:"transcript,omitempty"`
+	Speech       *Speech       `json:"speech,omitempty"`
 }
 
 type Snapshot struct {
