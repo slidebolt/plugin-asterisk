@@ -26,6 +26,7 @@ const (
 	EntityCall         = "call"
 	EntityTranscript   = "transcript"
 	EntitySpeech       = "speech"
+	EntityMessages     = "messages"
 )
 
 var deviceUnsafe = regexp.MustCompile(`[^A-Za-z0-9_]`)
@@ -98,10 +99,15 @@ func Endpoint(e hostapi.Endpoint) Item {
 	}
 	if e.Kind == "service" {
 		// A number SlideBolt answers. It cannot be dialed out to or hung up.
-		return newItem(device, availability,
+		entities := []domain.Entity{availability,
 			entity(d, EntityRegistration, "sip_endpoint", e.Name, nil, domain.SIPEndpoint{
 				Registered: online, Status: e.Status, Role: "service",
-			}))
+			})}
+		if in := e.Inbox; in != nil {
+			entities = append(entities, entity(d, EntityMessages, "sip_messages", e.Name+" Messages", []string{"sip_message_send"},
+				domain.SIPMessages{Seq: in.Seq, From: in.From, Text: in.Text, At: in.At}))
+		}
+		return newItem(device, entities...)
 	}
 
 	callState := "idle"

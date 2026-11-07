@@ -72,6 +72,11 @@ func (a *App) routeEndpoint(ctx context.Context, e hostapi.Endpoint, addr messen
 			return fmt.Errorf("%s is not in a call", e.ID)
 		}
 		return a.host.Play(ctx, e.Call, hostapi.PlayRequest{Sound: c.Sound, ThenHangup: c.ThenHangup})
+	case domain.SIPMessageSend:
+		if e.Kind != "service" {
+			return fmt.Errorf("%s is not a service number", e.ID)
+		}
+		return a.host.SendMessage(ctx, e.ID, hostapi.MessageRequest{To: c.To, Text: c.Text})
 	case domain.MediaStreamStart:
 		return a.host.StartListen(ctx, e.ID)
 	case domain.MediaStreamStop:

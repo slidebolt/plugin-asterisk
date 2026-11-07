@@ -44,6 +44,8 @@ func newFakeHost(t *testing.T) *fakeHost {
 			{ID: "201", Name: "Kitchen Phone", Kind: "extension", Status: "offline", Features: hostapi.Features{Listen: "never"}},
 			{ID: "float-10000", Name: "float-10000", Kind: "extension", Status: "offline", Features: hostapi.Features{Listen: "never"}},
 			{ID: "trunk1", Name: "trunk1", Kind: "trunk", Status: "online", Features: hostapi.Features{Listen: "never"}},
+			{ID: "4000", Name: "Agent", Kind: "service", Role: "service", Status: "online", Features: hostapi.Features{Listen: "never"},
+				Inbox: &hostapi.Inbox{}},
 		},
 		Calls: []hostapi.Call{},
 	}
@@ -315,6 +317,28 @@ func TestSync_SpeechReachesEntity(t *testing.T) {
 	})
 }
 
+func TestSync_TextMessageReachesInbox(t *testing.T) {
+	h := startSync(t, nil)
+	soon(t, "empty inbox", func() bool { return h.exists("ext_4000", "messages") })
+	h.host.emit(hostapi.EventEndpoint, hostapi.Endpoint{ID: "4000", Name: "Agent", Kind: "service", Role: "service", Status: "online",
+		Inbox: &hostapi.Inbox{Seq: 1, From: "201", Text: "turn on the lamp", At: "2026-11-07T00:00:00Z"}})
+	soon(t, "message", func() bool {
+		s := h.get(t, "ext_4000", "messages").State.(domain.SIPMessages)
+		return s.Seq == 1 && s.From == "201" && s.Text == "turn on the lamp"
+	})
+}
+
+// Only a service number sends texts; a phone cannot be made to text another.
+func TestCommands_TextOnlyFromAService(t *testing.T) {
+	h := startSync(t, nil)
+	h.send(t, "ext_201", "registration", domain.SIPMessageSend{To: "202", Text: "x"})
+	h.send(t, "ext_4000", "messages", domain.SIPMessageSend{To: "201", Text: "ok"})
+	soon(t, "the valid text", func() bool { return h.host.called("POST /v1/endpoints/4000/messages") })
+	if h.host.called("POST /v1/endpoints/201/messages") {
+		t.Fatal("a phone was used to send a text")
+	}
+}
+
 func TestSync_EndpointEventUpdatesState(t *testing.T) {
 	h := startSync(t, nil)
 	h.host.emit(hostapi.EventEndpoint, hostapi.Endpoint{ID: "201", Name: "Kitchen Phone", Kind: "extension", Status: "online", Call: "c"})
@@ -360,6 +384,8 @@ func TestCommands_RouteToHost(t *testing.T) {
 		{"unhold", "call_x", "p_201", domain.SIPUnhold{}, "POST /v1/calls/x/participants/201/commands", `{"action":"unhold"}`},
 		{"dtmf", "call_x", "p_201", domain.SIPDTMF{Digits: "#"}, "POST /v1/calls/x/participants/201/commands", `{"action":"dtmf","parameters":{"digits":"#"}}`},
 		{"remove", "call_x", "p_201", domain.SIPRemove{}, "DELETE /v1/calls/x/participants/201", ""},
+		{"text from a service", "ext_4000", "messages", domain.SIPMessageSend{To: "201", Text: "The lamp is on."},
+			"POST /v1/endpoints/4000/messages", `{"to":"201","text":"The lamp is on."}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

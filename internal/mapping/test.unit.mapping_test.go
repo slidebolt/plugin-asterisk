@@ -126,6 +126,22 @@ func TestEndpoint_Service(t *testing.T) {
 	}
 }
 
+func TestEndpoint_ServiceWithText(t *testing.T) {
+	item := Endpoint(hostapi.Endpoint{ID: "4000", Name: "Agent", Kind: "service", Status: "online",
+		Inbox: &hostapi.Inbox{Seq: 2, From: "201", Text: "hi", At: "2026-11-07T00:00:00Z"}})
+	if len(item.Entities) != 3 {
+		t.Fatalf("service with text = %+v", item)
+	}
+	e := find(t, item, EntityMessages)
+	s := e.State.(domain.SIPMessages)
+	if e.Type != "sip_messages" || s.Seq != 2 || s.From != "201" || s.Text != "hi" || s.At == "" {
+		t.Fatalf("messages = %+v", e)
+	}
+	if !slices.Equal(e.Commands, []string{"sip_message_send"}) {
+		t.Fatalf("commands = %v", e.Commands)
+	}
+}
+
 func TestCall_Speech(t *testing.T) {
 	idle := find(t, Call(hostapi.Call{ID: "x", Status: "active"}), EntitySpeech).State.(domain.Speech)
 	if idle.Status != "idle" {

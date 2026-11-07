@@ -96,6 +96,11 @@ func (c *Client) Say(ctx context.Context, call string, req SayRequest) error {
 	return c.do(ctx, http.MethodPost, callPath(call)+"/speech", req, nil)
 }
 
+// SendMessage texts an extension from a service number.
+func (c *Client) SendMessage(ctx context.Context, service string, req MessageRequest) error {
+	return c.do(ctx, http.MethodPost, endpointPath(service)+"/messages", req, nil)
+}
+
 func (c *Client) StartListen(ctx context.Context, endpoint string) error {
 	return c.do(ctx, http.MethodPost, endpointPath(endpoint)+"/listen", nil, nil)
 }

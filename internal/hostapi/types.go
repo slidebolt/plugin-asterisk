@@ -30,6 +30,20 @@ type Endpoint struct {
 	Call     string   `json:"call,omitempty"`
 	Features Features `json:"features"`
 	Stream   *Stream  `json:"stream,omitempty"`
+	Inbox    *Inbox   `json:"inbox,omitempty"`
+}
+
+// Inbox is the latest text message to a service number.
+type Inbox struct {
+	Seq  int    `json:"seq"`
+	From string `json:"from,omitempty"`
+	Text string `json:"text,omitempty"`
+	At   string `json:"at,omitempty"`
+}
+
+type MessageRequest struct {
+	To   string `json:"to"`
+	Text string `json:"text"`
 }
 
 type Participant struct {
