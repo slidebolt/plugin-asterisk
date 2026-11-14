@@ -51,6 +51,7 @@ func (a *App) Hello() contract.HelloResponse {
 		ID:              PluginID,
 		Kind:            contract.KindPlugin,
 		ContractVersion: contract.ContractVersion,
+		Definitions:     contract.DescribePlugin("Asterisk", "Exposes PBX, SIP endpoint, call, participant, message, transcript, and media state.", "binary_sensor", "media_stream", "pbx", "sensor", "sip_call", "sip_endpoint", "sip_messages", "sip_participant", "sip_trunk", "transcript"),
 		DependsOn:       []string{"messenger", "storage"},
 	}
 }
