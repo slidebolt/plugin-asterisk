@@ -52,7 +52,8 @@ func (a *App) Hello() contract.HelloResponse {
 		Kind:            contract.KindPlugin,
 		ContractVersion: contract.ContractVersion,
 		Definitions:     contract.DescribePlugin("Asterisk", "Exposes PBX, SIP endpoint, call, participant, message, transcript, and media state.", "binary_sensor", "media_stream", "pbx", "sensor", "sip_call", "sip_endpoint", "sip_messages", "sip_participant", "sip_trunk", "transcript"),
-		DependsOn:       []string{"messenger", "storage"},
+		DependsOn:       []string{"messenger", "storage", "asterisk-host"},
+		Setup:           contract.SelectableSetup("Voice"),
 	}
 }
 
@@ -79,7 +80,11 @@ func (a *App) OnStart(deps map[string]json.RawMessage) (json.RawMessage, error) 
 	a.subs = append(a.subs, sub)
 
 	a.ctx, a.cancel = context.WithCancel(context.Background())
-	host, err := hostapi.New(os.Getenv("ASTERISK_HOST_URL"), os.Getenv("ASTERISK_HOST_TOKEN"))
+	hostURL, hostToken, err := hostConnection(deps)
+	if err != nil {
+		return nil, err
+	}
+	host, err := hostapi.New(hostURL, hostToken)
 	if err != nil {
 		log.Printf("plugin-asterisk: disabled: %v", err)
 		a.applyServer(hostapi.Server{Error: err.Error()})
@@ -91,6 +96,21 @@ func (a *App) OnStart(deps map[string]json.RawMessage) (json.RawMessage, error) 
 
 	log.Println("plugin-asterisk: started")
 	return nil, nil
+}
+
+func hostConnection(deps map[string]json.RawMessage) (string, string, error) {
+	hostURL, hostToken := os.Getenv("ASTERISK_HOST_URL"), os.Getenv("ASTERISK_HOST_TOKEN")
+	if raw := deps["asterisk-host"]; len(raw) > 0 {
+		var dependency struct {
+			URL   string `json:"url"`
+			Token string `json:"token"`
+		}
+		if err := json.Unmarshal(raw, &dependency); err != nil {
+			return "", "", fmt.Errorf("parse asterisk-host dependency: %w", err)
+		}
+		hostURL, hostToken = dependency.URL, dependency.Token
+	}
+	return hostURL, hostToken, nil
 }
 
 func (a *App) OnShutdown() error {
